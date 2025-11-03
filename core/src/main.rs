@@ -1,0 +1,74 @@
+mod types;
+mod scanner;
+mod safety;
+mod optimization;
+mod cache;
+mod ml;
+mod arc_lfu;
+
+use anyhow::Result;
+use clap::{Parser, Subcommand, ArgGroup};
+use std::path::PathBuf;
+
+use optimization::{plan_basic_cleanup, RulesConfig};
+
+#[derive(Parser)]
+#[command(name = "packagepurge-core", version)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Scan filesystem and output dependency/caches JSON
+    Scan { #[arg(short, long)] paths: Vec<PathBuf> },
+    /// Produce cleanup plan without mutating filesystem
+    DryRun { #[arg(short, long, default_value_t = 90)] preserve_days: i64, #[arg(short, long)] paths: Vec<PathBuf> },
+    /// Move targets to quarantine (atomic move) based on paths provided
+    Quarantine { #[arg(required=true)] targets: Vec<PathBuf> },
+    /// Rollback by id or latest
+    Rollback {
+        #[arg(long)] id: Option<String>,
+        #[arg(long)] latest: bool,
+    },
+}
+
+fn main() -> Result<()> {
+    let cli = Cli::parse();
+    match cli.command {
+        Commands::Scan { paths } => {
+            let out = scanner::scan(&paths)?;
+            println!("{}", serde_json::to_string_pretty(&out)?);
+        }
+        Commands::DryRun { preserve_days, paths } => {
+            let scan = scanner::scan(&paths)?;
+            let report = plan_basic_cleanup(&scan, &RulesConfig { preserve_days })?;
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        }
+        Commands::Quarantine { targets } => {
+            let mut recs = Vec::new();
+            for t in targets {
+                match safety::move_to_quarantine(&t) {
+                    Ok(r) => recs.push(r),
+                    Err(e) => eprintln!("Failed to quarantine {:?}: {}", t, e),
+                }
+            }
+            println!("{}", serde_json::to_string_pretty(&recs)?);
+        }
+        Commands::Rollback { id, latest } => {
+            let rec = if let Some(i) = id { safety::find_quarantine_by_id(&i) } else if latest { safety::latest_quarantine() } else { None };
+            if let Some(r) = rec {
+                if let Err(e) = safety::rollback_record(&r) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+                println!("{}", serde_json::to_string_pretty(&serde_json::json!({"status":"ok","id": r.id}))?);
+            } else {
+                eprintln!("No matching quarantine record found");
+                std::process::exit(2);
+            }
+        }
+    }
+    Ok(())
+}
