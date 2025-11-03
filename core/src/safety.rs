@@ -48,7 +48,7 @@ fn sha256_dir(path: &Path) -> Result<(String, u64)> {
 pub fn move_to_quarantine(target: &Path) -> Result<QuarantineRecord> {
     let qdir = quarantine_dir();
     fs::create_dir_all(&qdir).ok();
-    let id = format!("{}", Utc::now().timestamp_nanos());
+    let id = format!("{}", Utc::now().timestamp_nanos_opt().unwrap_or(0));
     let (checksum, size) = sha256_dir(target)?;
     let qpath = qdir.join(format!("{}_{}", id, target.file_name().unwrap_or_default().to_string_lossy()));
     fs::rename(target, &qpath).with_context(|| format!("Failed to move {:?} to quarantine", target))?;

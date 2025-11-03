@@ -2,7 +2,7 @@
 name = "packagepurge_core"
 version = "0.1.0"
 authors = ["Eng. Onyango Benard"]
-edition = "2025"
+edition = "2021"
 
 [dependencies]
 walkdir = "2.5"

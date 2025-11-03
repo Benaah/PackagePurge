@@ -5,9 +5,10 @@ mod optimization;
 mod cache;
 mod ml;
 mod arc_lfu;
+mod lockfiles;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand, ArgGroup};
+use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 use optimization::{plan_basic_cleanup, RulesConfig};
