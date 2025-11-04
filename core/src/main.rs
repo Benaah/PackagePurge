@@ -6,6 +6,8 @@ mod cache;
 mod ml;
 mod arc_lfu;
 mod lockfiles;
+mod symlink;
+mod usage_tracker;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -44,7 +46,13 @@ fn main() -> Result<()> {
         }
         Commands::DryRun { preserve_days, paths } => {
             let scan = scanner::scan(&paths)?;
-            let report = plan_basic_cleanup(&scan, &RulesConfig { preserve_days })?;
+            let report = plan_basic_cleanup(&scan, &RulesConfig {
+                preserve_days,
+                enable_symlinking: false,
+                enable_ml_prediction: false,
+                lru_max_packages: 1000,
+                lru_max_size_bytes: 10_000_000_000, // 10GB default
+            })?;
             println!("{}", serde_json::to_string_pretty(&report)?);
         }
         Commands::Quarantine { targets } => {

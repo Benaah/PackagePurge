@@ -2,6 +2,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::rc::Rc;
+use chrono::Utc;
+use crate::types::PackageUsageMetrics;
 
 // Doubly-linked list node
 struct Node<K, V> {
@@ -85,6 +87,93 @@ impl<K, V> LruCache<K, V> where K: Eq + Hash + Clone {
 			return Some(t);
 		}
 		None
+	}
+}
+
+/// LRU cache specialized for package versions with usage tracking
+#[allow(dead_code)]
+pub struct PackageLruCache {
+	cache: LruCache<String, PackageUsageMetrics>,
+	max_size_bytes: u64,
+	current_size_bytes: u64,
+}
+
+impl PackageLruCache {
+	pub fn new(max_packages: usize, max_size_bytes: u64) -> Self {
+		Self {
+			cache: LruCache::new(max_packages),
+			max_size_bytes,
+			current_size_bytes: 0,
+		}
+	}
+
+	/// Record package access (updates atime and increments access count)
+	pub fn record_access(&mut self, package_key: &str, size_bytes: u64) {
+		let now = Utc::now();
+		if let Some(metrics) = self.cache.get(&package_key.to_string()) {
+			// Update existing metrics
+			let mut updated = metrics;
+			updated.last_access_time = now;
+			updated.access_count += 1;
+			self.cache.put(package_key.to_string(), updated);
+		} else {
+			// Create new metrics
+			let metrics = PackageUsageMetrics {
+				package_key: package_key.to_string(),
+				last_access_time: now,
+				last_script_execution: None,
+				access_count: 1,
+				script_execution_count: 0,
+				last_successful_build: None,
+			};
+			if let Some((_evicted_key, _evicted_metrics)) = self.cache.put(package_key.to_string(), metrics) {
+				// Handle eviction if needed
+				// In a full implementation, we'd track size_bytes per package
+			}
+			self.current_size_bytes += size_bytes;
+		}
+	}
+
+	/// Record successful script execution
+	pub fn record_script_execution(&mut self, package_key: &str) {
+		let now = Utc::now();
+		if let Some(metrics) = self.cache.get(&package_key.to_string()) {
+			let mut updated = metrics;
+			updated.last_script_execution = Some(now);
+			updated.script_execution_count += 1;
+			self.cache.put(package_key.to_string(), updated);
+		}
+	}
+
+	/// Record successful build
+	pub fn record_build(&mut self, package_key: &str) {
+		let now = Utc::now();
+		if let Some(metrics) = self.cache.get(&package_key.to_string()) {
+			let mut updated = metrics;
+			updated.last_successful_build = Some(now);
+			self.cache.put(package_key.to_string(), updated);
+		}
+	}
+
+	/// Get metrics for a package (updates LRU position)
+	pub fn get_metrics(&mut self, package_key: &str) -> Option<PackageUsageMetrics> {
+		self.cache.get(&package_key.to_string())
+	}
+
+	/// Get least recently used packages (for eviction candidates)
+	pub fn get_lru_packages(&self, _count: usize) -> Vec<String> {
+		// This is a simplified version - in a full implementation,
+		// we'd need to iterate through the tail of the LRU cache
+		Vec::new() // Placeholder
+	}
+
+	/// Check if package should be kept based on LRU strategy
+	pub fn should_keep_lru(&mut self, package_key: &str, days_threshold: i64) -> bool {
+		if let Some(metrics) = self.get_metrics(package_key) {
+			let days_since_access = (Utc::now() - metrics.last_access_time).num_days();
+			return days_since_access < days_threshold;
+		}
+		false
 	}
 }
 

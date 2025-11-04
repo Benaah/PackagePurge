@@ -66,6 +66,7 @@ pub fn move_to_quarantine(target: &Path) -> Result<QuarantineRecord> {
     Ok(rec)
 }
 
+#[allow(dead_code)]
 pub fn list_quarantine() -> Vec<QuarantineRecord> { read_index() }
 
 pub fn latest_quarantine() -> Option<QuarantineRecord> {
