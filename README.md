@@ -23,11 +23,13 @@ PackagePurge is a comprehensive service that solves the persistent "npm hell" st
 
 ### Technical Stack
 
-- **Language**: TypeScript (Node.js)
-- **CLI**: Commander.js for command-line interface
-- **File Operations**: fs-extra for robust filesystem operations
+- **Core**: Rust (high-performance scanning and optimization)
+- **CLI**: TypeScript (Node.js) with Commander.js
+- **File Operations**: Rust stdlib + fs-extra for robust filesystem operations
 - **Dependency Analysis**: Custom parsers for package.json, lock files
-- **ML Component**: Rule-based initially, extensible for ML models
+- **ML Component**: Rule-based classifier (extensible to actual ML models)
+- **Symlinking**: Cross-platform hard linking and symbolic links
+- **Caching**: LRU cache with ML-driven predictions
 
 ## 📦 Installation
 
@@ -37,24 +39,55 @@ npm install -g packagepurge
 
 ## 🚀 Usage
 
-### Basic Cleanup
+### Scan Filesystem
 ```bash
-packagepurge clean
+packagepurge scan
+packagepurge scan --paths ./project1 ./project2
 ```
 
-### Project-Aware Analysis
+### Analyze (Dry Run)
 ```bash
-packagepurge analyze --project ./my-project
+packagepurge analyze
+packagepurge analyze --paths ./my-project --preserve-days 90
 ```
 
-### Custom Strategy
+### Optimize with ML/LRU and Symlinking
 ```bash
-packagepurge clean --strategy aggressive --backup
+# Basic optimization
+packagepurge optimize
+
+# With ML predictions enabled
+packagepurge optimize --enable-ml --preserve-days 90
+
+# With symlinking enabled
+packagepurge optimize --enable-symlinking
+
+# Full optimization with all features
+packagepurge optimize --enable-ml --enable-symlinking --lru-max-packages 2000
 ```
 
-### View Dashboard
+### Execute Symlinking
 ```bash
-packagepurge dashboard
+# Symlink duplicate packages across projects
+packagepurge symlink --paths ./project1 ./project2
+```
+
+### Clean (Quarantine)
+```bash
+# First analyze to get targets
+packagepurge analyze > plan.json
+
+# Then quarantine targets
+packagepurge clean --targets $(jq -r '.items[].target_path' plan.json)
+```
+
+### Rollback
+```bash
+# Rollback latest quarantine
+packagepurge rollback --latest
+
+# Rollback by ID
+packagepurge rollback --id <quarantine-id>
 ```
 
 ## 🔧 Configuration

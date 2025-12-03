@@ -10,11 +10,13 @@
   "scripts": {
     "build": "npm run build:core && tsc",
     "build:core": "cd core && cargo build --release",
-    "dev": "ts-node src/cli/index.ts",
+    "build:core:debug": "cd core && cargo build",
+    "dev": "npm run build:core:debug && ts-node src/cli/index.ts",
     "start": "node dist/cli/index.js",
     "test": "jest",
     "lint": "eslint src/**/*.ts",
-    "clean": "rimraf dist"
+    "clean": "rimraf dist",
+    "clean:core": "cd core && cargo clean"
   },
   "keywords": [
     "npm",

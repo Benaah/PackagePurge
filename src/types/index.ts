@@ -67,9 +67,26 @@ export interface OptimizationConfig {
   preserveDays: number;
   keepVersions: number;
   enableML: boolean;
+  enableSymlinking: boolean;
   backupEnabled: boolean;
   managers: PackageManager[];
   dryRun: boolean;
+  lruMaxPackages?: number;
+  lruMaxSizeBytes?: number;
+}
+
+export interface OptimizeResult {
+  items: Array<{
+    target_path: string;
+    estimated_size_bytes: number;
+    reason: string;
+  }>;
+  total_estimated_bytes: number;
+}
+
+export interface SymlinkResult {
+  status: string;
+  symlinked_count: number;
 }
 
 export interface DependencyGraph {

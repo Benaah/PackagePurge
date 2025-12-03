@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from '../utils/logger';
 import YAML from 'yaml';
+import { optimize, executeSymlinking } from '../core/bindings';
 
 function isWindows(): boolean {
 	return process.platform === 'win32';
@@ -144,6 +145,65 @@ program
 		const res = await runCore(finalArgs);
 		if (res.code !== 0) {
 			if (!g.quiet) logger.error(res.stderr || 'Rollback failed');
+			process.exit(res.code);
+		}
+		await output(res.stdout, (g.format || 'json'));
+	});
+
+program
+	.command('optimize')
+	.description('Optimize with ML/LRU prediction and symlinking (dry run)')
+	.option('-p, --paths <paths...>', 'Paths to optimize', [])
+	.option('-d, --preserve-days <days>', 'Days to preserve packages', '90')
+	.option('--enable-symlinking', 'Enable cross-project symlinking', false)
+	.option('--enable-ml', 'Enable ML-based predictions', false)
+	.option('--lru-max-packages <count>', 'Maximum packages in LRU cache', '1000')
+	.option('--lru-max-size-bytes <bytes>', 'Maximum size of LRU cache in bytes', '10000000000')
+	.action(async (opts, cmd) => {
+		const g = cmd.parent?.opts?.() || {};
+		const preserve = String(opts.preserveDays ?? opts['preserve-days'] ?? opts.d ?? 90);
+		const lruPackages = String(opts.lruMaxPackages ?? opts['lru-max-packages'] ?? 1000);
+		const lruSize = String(opts.lruMaxSizeBytes ?? opts['lru-max-size-bytes'] ?? 10000000000);
+		
+		const args = [
+			'optimize',
+			'--preserve-days', preserve,
+			'--lru-max-packages', lruPackages,
+			'--lru-max-size-bytes', lruSize,
+		];
+		
+		if (opts.enableSymlinking || opts['enable-symlinking']) {
+			args.push('--enable-symlinking');
+		}
+		if (opts.enableMl || opts['enable-ml']) {
+			args.push('--enable-ml');
+		}
+		
+		if (opts.paths?.length) {
+			args.push('--paths', ...opts.paths);
+		}
+		
+		const res = await runCore(args);
+		if (res.code !== 0) {
+			if (!g.quiet) logger.error(res.stderr || 'Optimize failed');
+			process.exit(res.code);
+		}
+		await output(res.stdout, (g.format || 'json'));
+	});
+
+program
+	.command('symlink')
+	.description('Execute symlinking for duplicate packages across projects')
+	.option('-p, --paths <paths...>', 'Paths to process', [])
+	.action(async (opts, cmd) => {
+		const g = cmd.parent?.opts?.() || {};
+		const args = ['symlink'];
+		if (opts.paths?.length) {
+			args.push('--paths', ...opts.paths);
+		}
+		const res = await runCore(args);
+		if (res.code !== 0) {
+			if (!g.quiet) logger.error(res.stderr || 'Symlink failed');
 			process.exit(res.code);
 		}
 		await output(res.stdout, (g.format || 'json'));
