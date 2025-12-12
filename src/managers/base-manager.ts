@@ -7,7 +7,6 @@ import * as path from 'path';
 
 export abstract class BasePackageManager {
   abstract readonly manager: PackageManager;
-  abstract readonly cachePath: string;
   abstract readonly lockFileName: string;
 
   /**
@@ -59,13 +58,14 @@ export abstract class BasePackageManager {
     const projects: ProjectInfo[] = [];
     const lockFilePattern = this.lockFileName;
 
-    async function searchDir(dir: string, depth: number = 0): Promise<void> {
+    const searchDir = async (dir: string, depth: number = 0): Promise<void> => {
       if (depth > 10) return; // Limit depth to prevent infinite recursion
 
       try {
-        const entries = await fs.readdir(dir);
-        const hasLockFile = entries.includes(lockFilePattern);
-        const hasPackageJson = entries.includes('package.json');
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        const entryNames = entries.map(e => e.name);
+        const hasLockFile = entryNames.includes(lockFilePattern);
+        const hasPackageJson = entryNames.includes('package.json');
 
         if (hasLockFile && hasPackageJson) {
           const packageJsonPath = path.join(dir, 'package.json');
@@ -85,16 +85,14 @@ export abstract class BasePackageManager {
 
         // Recursively search subdirectories
         for (const entry of entries) {
-          const entryPath = path.join(dir, entry);
-          const stat = await fs.stat(entryPath);
-          if (stat.isDirectory() && !entry.startsWith('.') && entry !== 'node_modules') {
-            await searchDir(entryPath, depth + 1);
+          if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+             await searchDir(path.join(dir, entry.name), depth + 1);
           }
         }
       } catch (error) {
         // Skip directories we can't read
       }
-    }
+    };
 
     await searchDir(rootDir);
     return projects;
