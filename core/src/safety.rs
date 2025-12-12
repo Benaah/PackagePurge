@@ -51,7 +51,18 @@ pub fn move_to_quarantine(target: &Path) -> Result<QuarantineRecord> {
     let id = format!("{}", Utc::now().timestamp_nanos_opt().unwrap_or(0));
     let (checksum, size) = sha256_dir(target)?;
     let qpath = qdir.join(format!("{}_{}", id, target.file_name().unwrap_or_default().to_string_lossy()));
-    fs::rename(target, &qpath).with_context(|| format!("Failed to move {:?} to quarantine", target))?;
+    if let Err(e) = fs::rename(target, &qpath) {
+        // Handle cross-device link errors (os error 17 or 18 on Unix, or similar on Windows)
+        // We simply try copy-and-delete as fallback for any rename failure
+        if let Err(copy_err) = fs_extra::dir::copy(target, &qpath, &fs_extra::dir::CopyOptions::new().content_only(true)) {
+             return Err(anyhow::anyhow!("Failed to move {:?} to quarantine (rename failed: {}, copy failed: {})", target, e, copy_err));
+        }
+        if let Err(rm_err) = fs::remove_dir_all(target) {
+            // If we can't remove original, we should probably clean up the quarantine copy
+            fs::remove_dir_all(&qpath).ok();
+            return Err(anyhow::anyhow!("Failed to remove original {:?} after copy to quarantine: {}", target, rm_err));
+        }
+    }
     let rec = QuarantineRecord {
         id,
         original_path: target.to_string_lossy().to_string(),

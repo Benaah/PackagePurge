@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::collections::{HashMap, VecDeque};
 
 // SLRU: probationary and protected segments, each LRU-like (front=MRU, back=LRU)

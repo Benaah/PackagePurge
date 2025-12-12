@@ -25,7 +25,9 @@ impl<K, V> LruCache<K, V> where K: Eq + Hash + Clone {
 		Self { capacity, map: HashMap::new(), head: None, tail: None }
 	}
 
+	#[allow(dead_code)]
 	pub fn len(&self) -> usize { self.map.len() }
+	#[allow(dead_code)]
 	pub fn is_empty(&self) -> bool { self.map.is_empty() }
 
 	pub fn get(&mut self, key: &K) -> Option<V> where V: Clone {
@@ -135,6 +137,7 @@ impl PackageLruCache {
 	}
 
 	/// Record successful script execution
+	#[allow(dead_code)]
 	pub fn record_script_execution(&mut self, package_key: &str) {
 		let now = Utc::now();
 		if let Some(metrics) = self.cache.get(&package_key.to_string()) {
@@ -146,6 +149,7 @@ impl PackageLruCache {
 	}
 
 	/// Record successful build
+	#[allow(dead_code)]
 	pub fn record_build(&mut self, package_key: &str) {
 		let now = Utc::now();
 		if let Some(metrics) = self.cache.get(&package_key.to_string()) {
@@ -161,6 +165,7 @@ impl PackageLruCache {
 	}
 
 	/// Get least recently used packages (for eviction candidates)
+	#[allow(dead_code)]
 	pub fn get_lru_packages(&self, _count: usize) -> Vec<String> {
 		// This is a simplified version - in a full implementation,
 		// we'd need to iterate through the tail of the LRU cache

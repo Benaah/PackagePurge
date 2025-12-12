@@ -13,7 +13,7 @@ fn dir_size(path: &Path) -> u64 {
     let mut total: u64 = 0;
     for entry in WalkDir::new(path).into_iter().filter_map(|e| e.ok()) {
         if entry.file_type().is_file() {
-            if let Ok(meta) = fs::metadata(entry.path()) {
+            if let Ok(meta) = entry.metadata() {
                 total += meta.len();
             }
         }
@@ -30,7 +30,7 @@ fn detect_manager_from_lock(dir: &Path) -> Option<PackageManager> {
 
 fn collect_projects_and_edges(root: &Path) -> (Vec<ProjectRecord>, Vec<(String, String)>) {
     let mut projects = Vec::new();
-    let mut edges: Vec<(String, String)> = Vec::new();
+    let edges: Vec<(String, String)> = Vec::new();
     for entry in WalkDir::new(root).max_depth(6).into_iter().filter_map(|e| e.ok()) {
         if entry.file_type().is_file() && entry.file_name() == "package.json" {
             let dir = entry.path().parent().unwrap_or(root);
@@ -52,14 +52,14 @@ fn collect_projects_and_edges(root: &Path) -> (Vec<ProjectRecord>, Vec<(String, 
                     }
                 }
             }
-            // Lockfile DAG
-            let lock_edges = match manager {
+            // Lockfile dependencies
+            let lock_deps = match manager {
                 Some(PackageManager::Npm) => parse_npm_package_lock(&dir.join("package-lock.json")),
                 Some(PackageManager::Yarn) => parse_yarn_lock(&dir.join("yarn.lock")),
                 Some(PackageManager::Pnpm) => parse_pnpm_lock(&dir.join("pnpm-lock.yaml")),
                 None => Vec::new(),
             };
-            edges.extend(lock_edges);
+            deps.extend(lock_deps);
 
             projects.push(ProjectRecord {
                 path: dir.to_string_lossy().to_string(),

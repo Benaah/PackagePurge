@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::fs;
@@ -7,7 +8,6 @@ use crate::types::PackageUsageMetrics;
 use crate::cache::PackageLruCache;
 
 /// Tracks and persists package usage metrics across runs
-#[allow(dead_code)]
 pub struct UsageTracker {
     cache_path: PathBuf,
     lru_cache: PackageLruCache,
@@ -105,4 +105,3 @@ pub fn detect_script_execution(project_path: &Path, script_name: &str) -> Vec<St
 
     affected_packages
 }
-
