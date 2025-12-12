@@ -1,0 +1,41 @@
+# Exclude source files
+src/
+core/src/
+core/target/
+
+# Exclude dependencies
+node_modules/
+
+# Exclude version control
+.git/
+.gitignore
+
+# Exclude build artifacts and caches
+.cache/
+coverage/
+*.log
+
+# Exclude IDE files
+.idea/
+.vscode/
+
+# Exclude environment files
+.env
+.env.local
+
+# Exclude backup and rollback files
+*.backup
+*.rollback
+
+# Exclude OS files
+.DS_Store
+
+# Exclude test files if any
+test/
+tests/
+
+# Exclude development config files
+tsconfig.json
+.eslintrc*
+.prettierrc*
+jest.config.*
