@@ -1,6 +1,6 @@
 {
   "name": "packagepurge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Intelligent package manager cache cleanup service with project-aware optimization",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
