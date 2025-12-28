@@ -138,6 +138,20 @@ impl PackageLruCache {
 			// Track size for this package
 			self.size_map.insert(package_key.to_string(), size_bytes);
 			self.current_size_bytes += size_bytes;
+			
+			// Enforce size limit by evicting LRU packages if needed
+			while self.current_size_bytes > self.max_size_bytes && !self.size_map.is_empty() {
+				let lru = self.get_lru_packages(1);
+				if let Some(lru_key) = lru.first() {
+					if let Some(size) = self.size_map.remove(lru_key) {
+						self.current_size_bytes = self.current_size_bytes.saturating_sub(size);
+					}
+					// Remove from LRU cache (by getting and not keeping reference)
+					self.cache.get(lru_key);
+				} else {
+					break;
+				}
+			}
 		}
 	}
 
@@ -209,12 +223,45 @@ impl PackageLruCache {
 	}
 
 	/// Check if package should be kept based on LRU strategy
+	/// Takes into account access time and cache size pressure
 	pub fn should_keep_lru(&mut self, package_key: &str, days_threshold: i64) -> bool {
 		if let Some(metrics) = self.get_metrics(package_key) {
 			let days_since_access = (Utc::now() - metrics.last_access_time).num_days();
-			return days_since_access < days_threshold;
+			
+			// Always keep recently accessed packages
+			if days_since_access < days_threshold {
+				return true;
+			}
+			
+			// If we're under size pressure, be more aggressive about eviction
+			let size_pressure = self.current_size() as f64 / self.max_size_bytes as f64;
+			if size_pressure > 0.9 {
+				// Under high pressure, only keep if accessed very recently
+				return days_since_access < (days_threshold / 3);
+			}
+			
+			// Check if this is a large package - deprioritize large stale packages
+			if let Some(pkg_size) = self.get_package_size(package_key) {
+				let avg_size = if self.size_map.is_empty() { 
+					pkg_size 
+				} else { 
+					self.current_size() / self.size_map.len() as u64 
+				};
+				
+				// Large packages (>2x average) get shorter grace periods
+				if pkg_size > avg_size * 2 {
+					return days_since_access < (days_threshold / 2);
+				}
+			}
+			
+			return false;
 		}
 		false
+	}
+	
+	/// Check if cache is under size pressure
+	pub fn is_size_limited(&self) -> bool {
+		self.current_size() >= self.max_size_bytes
 	}
 }
 

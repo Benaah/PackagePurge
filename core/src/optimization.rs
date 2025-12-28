@@ -191,6 +191,13 @@ impl OptimizationEngine {
 				true
 			};
 
+			// Check if cache is under size pressure
+			let cache_size_limited = if let Some(ref cache) = self.lru_cache {
+				cache.is_size_limited()
+			} else {
+				false
+			};
+
 			// Determine if package should be removed
 			if is_orphan || (is_old && !should_keep_ml && !should_keep_lru) {
 				items.push(PlanItem {
@@ -200,6 +207,8 @@ impl OptimizationEngine {
 						"orphaned".into()
 					} else if !should_keep_ml {
 						"ml_predicted_unused".into()
+					} else if cache_size_limited {
+						"size_pressure".into()
 					} else {
 						"old".into()
 					},

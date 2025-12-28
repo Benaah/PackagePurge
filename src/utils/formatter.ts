@@ -43,6 +43,8 @@ function getReasonColor(reason: string): chalk.Chalk {
             return chalk.blue;
         case 'ml_predicted_unused':
             return chalk.magenta;
+        case 'size_pressure':
+            return chalk.red;
         default:
             return chalk.white;
     }
@@ -63,6 +65,8 @@ function formatReason(reason: string): string {
             return 'Symlink Candidate';
         case 'ml_predicted_unused':
             return 'ML: Unused';
+        case 'size_pressure':
+            return 'Size Pressure';
         default:
             return reason;
     }
