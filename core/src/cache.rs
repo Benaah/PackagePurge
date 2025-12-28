@@ -93,9 +93,9 @@ impl<K, V> LruCache<K, V> where K: Eq + Hash + Clone {
 }
 
 /// LRU cache specialized for package versions with usage tracking
-#[allow(dead_code)]
 pub struct PackageLruCache {
 	cache: LruCache<String, PackageUsageMetrics>,
+	size_map: HashMap<String, u64>,  // Track size per package
 	max_size_bytes: u64,
 	current_size_bytes: u64,
 }
@@ -104,6 +104,7 @@ impl PackageLruCache {
 	pub fn new(max_packages: usize, max_size_bytes: u64) -> Self {
 		Self {
 			cache: LruCache::new(max_packages),
+			size_map: HashMap::new(),
 			max_size_bytes,
 			current_size_bytes: 0,
 		}
@@ -128,10 +129,14 @@ impl PackageLruCache {
 				script_execution_count: 0,
 				last_successful_build: None,
 			};
-			if let Some((_evicted_key, _evicted_metrics)) = self.cache.put(package_key.to_string(), metrics) {
-				// Handle eviction if needed
-				// In a full implementation, we'd track size_bytes per package
+			if let Some((evicted_key, _evicted_metrics)) = self.cache.put(package_key.to_string(), metrics) {
+				// Decrement size when a package is evicted
+				if let Some(evicted_size) = self.size_map.remove(&evicted_key) {
+					self.current_size_bytes = self.current_size_bytes.saturating_sub(evicted_size);
+				}
 			}
+			// Track size for this package
+			self.size_map.insert(package_key.to_string(), size_bytes);
 			self.current_size_bytes += size_bytes;
 		}
 	}
@@ -166,10 +171,41 @@ impl PackageLruCache {
 
 	/// Get least recently used packages (for eviction candidates)
 	#[allow(dead_code)]
-	pub fn get_lru_packages(&self, _count: usize) -> Vec<String> {
-		// This is a simplified version - in a full implementation,
-		// we'd need to iterate through the tail of the LRU cache
-		Vec::new() // Placeholder
+	/// Get least recently used packages (for eviction candidates)
+	pub fn get_lru_packages(&self, count: usize) -> Vec<String> {
+		// Iterate from tail (LRU) to head (MRU) and collect keys
+		let mut packages = Vec::new();
+		let mut current = self.cache.tail.clone();
+		while let Some(node) = current {
+			if packages.len() >= count {
+				break;
+			}
+			packages.push(node.borrow().key.clone());
+			current = node.borrow().prev.clone();
+		}
+		packages
+	}
+
+	/// Iterate over all cached entries (for persistence)
+	pub fn iter(&self) -> Vec<(String, PackageUsageMetrics)> {
+		let mut entries = Vec::new();
+		let mut current = self.cache.head.clone();
+		while let Some(node) = current {
+			let borrowed = node.borrow();
+			entries.push((borrowed.key.clone(), borrowed.value.clone()));
+			current = borrowed.next.clone();
+		}
+		entries
+	}
+
+	/// Get the size of a specific package
+	pub fn get_package_size(&self, package_key: &str) -> Option<u64> {
+		self.size_map.get(package_key).copied()
+	}
+
+	/// Get current total size
+	pub fn current_size(&self) -> u64 {
+		self.current_size_bytes
 	}
 
 	/// Check if package should be kept based on LRU strategy

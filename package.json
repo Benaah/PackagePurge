@@ -5,6 +5,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
+    "purge": "dist/cli/index.js",
     "packagepurge": "dist/cli/index.js"
   },
   "scripts": {
@@ -61,4 +62,3 @@
     "node": ">=16.0.0"
   }
 }
-

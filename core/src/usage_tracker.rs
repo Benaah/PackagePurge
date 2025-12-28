@@ -49,8 +49,20 @@ impl UsageTracker {
 
     /// Persist metrics to disk
     pub fn save_metrics(&self) -> Result<()> {
-        // In a full implementation, we'd collect all metrics from the LRU cache
-        // For now, this is a placeholder that would be called after optimization runs
+        // Collect all metrics from the LRU cache
+        let mut metrics_map: HashMap<String, PackageUsageMetrics> = HashMap::new();
+        
+        // Iterate through the cache and collect metrics
+        for (key, metrics) in self.lru_cache.iter() {
+            metrics_map.insert(key, metrics);
+        }
+        
+        // Persist to disk
+        let content = serde_json::to_string_pretty(&metrics_map)
+            .with_context(|| "Failed to serialize metrics")?;
+        fs::write(&self.cache_path, content)
+            .with_context(|| format!("Failed to write metrics to {:?}", self.cache_path))?;
+        
         Ok(())
     }
 
@@ -69,12 +81,16 @@ impl UsageTracker {
     pub fn lru_cache_mut(&mut self) -> &mut PackageLruCache {
         &mut self.lru_cache
     }
+    
+    /// Get the LRU cache for read-only access
+    pub fn lru_cache(&self) -> &PackageLruCache {
+        &self.lru_cache
+    }
 }
 
 /// Helper to detect script execution from package.json scripts
-/// This would be integrated with npm/yarn execution monitoring
+/// Parses the script command to find the actual tool being used
 pub fn detect_script_execution(project_path: &Path, script_name: &str) -> Vec<String> {
-    use std::fs;
     use serde_json::Value;
 
     let package_json = project_path.join("package.json");
@@ -86,15 +102,20 @@ pub fn detect_script_execution(project_path: &Path, script_name: &str) -> Vec<St
 
     if let Ok(content) = fs::read_to_string(&package_json) {
         if let Ok(json) = serde_json::from_str::<Value>(&content) {
-            // Check if script exists
+            // Check if script exists and get its command
             if let Some(scripts) = json.get("scripts").and_then(|s| s.as_object()) {
-                if scripts.contains_key(script_name) {
-                    // In a full implementation, we'd parse the script to find dependencies
-                    // For now, we'll extract direct dependencies
-                    if let Some(deps) = json.get("dependencies").and_then(|d| d.as_object()) {
-                        for (name, version) in deps {
-                            if let Some(ver_str) = version.as_str() {
-                                affected_packages.push(format!("{}@{}", name, ver_str));
+                if let Some(script_cmd) = scripts.get(script_name).and_then(|v| v.as_str()) {
+                    // Parse the script command to find the tool being used
+                    // Examples: "vite build" -> vite, "jest --coverage" -> jest
+                    let tools = extract_tools_from_script(script_cmd);
+                    
+                    // Look for these tools in dependencies
+                    for dep_key in ["dependencies", "devDependencies"] {
+                        if let Some(deps) = json.get(dep_key).and_then(|d| d.as_object()) {
+                            for tool in &tools {
+                                if let Some(version) = deps.get(tool).and_then(|v| v.as_str()) {
+                                    affected_packages.push(format!("{}@{}", tool, version));
+                                }
                             }
                         }
                     }
@@ -104,4 +125,81 @@ pub fn detect_script_execution(project_path: &Path, script_name: &str) -> Vec<St
     }
 
     affected_packages
+}
+
+/// Extract tool names from a script command
+/// Handles common patterns like: "tool args", "npx tool", "node script.js", etc.
+fn extract_tools_from_script(script: &str) -> Vec<String> {
+    let mut tools = Vec::new();
+    
+    // Split by common command separators: &&, ||, ;, |
+    let parts: Vec<&str> = script
+        .split(|c| c == '&' || c == '|' || c == ';')
+        .filter(|s| !s.is_empty())
+        .collect();
+    
+    for part in parts {
+        let words: Vec<&str> = part.trim().split_whitespace().collect();
+        if words.is_empty() {
+            continue;
+        }
+        
+        let first = words[0];
+        
+        // Skip common shell/node commands and look for the actual tool
+        match first {
+            "npx" | "yarn" | "pnpm" | "npm" => {
+                // The next word is likely the tool (e.g., "npx vite" -> vite)
+                if words.len() > 1 {
+                    let tool = words[1];
+                    // Skip npm/yarn subcommands
+                    if !["run", "exec", "dlx", "-c", "--"].contains(&tool) {
+                        tools.push(tool.to_string());
+                    } else if words.len() > 2 {
+                        tools.push(words[2].to_string());
+                    }
+                }
+            }
+            "node" | "NODE_ENV=production" | "cross-env" => {
+                // Skip to next meaningful word
+                if words.len() > 1 {
+                    let next = words[1];
+                    if !next.starts_with('-') && !next.contains('=') && !next.ends_with(".js") {
+                        tools.push(next.to_string());
+                    }
+                }
+            }
+            _ => {
+                // First word is likely the tool itself
+                if !first.starts_with('-') && !first.contains('=') {
+                    tools.push(first.to_string());
+                }
+            }
+        }
+    }
+    
+    tools
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_tools_simple() {
+        assert_eq!(extract_tools_from_script("vite build"), vec!["vite"]);
+        assert_eq!(extract_tools_from_script("jest --coverage"), vec!["jest"]);
+    }
+
+    #[test]
+    fn test_extract_tools_npx() {
+        assert_eq!(extract_tools_from_script("npx vite build"), vec!["vite"]);
+    }
+
+    #[test]
+    fn test_extract_tools_chained() {
+        let tools = extract_tools_from_script("eslint . && prettier --check .");
+        assert!(tools.contains(&"eslint".to_string()));
+        assert!(tools.contains(&"prettier".to_string()));
+    }
 }
