@@ -9,6 +9,7 @@ mod lockfiles;
 mod symlink;
 mod usage_tracker;
 mod scan_cache;
+mod feature_store;
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -182,6 +183,11 @@ fn main() -> Result<()> {
                 None
             };
             
+            // Feature store stats
+            let feature_stats = feature_store::FeatureStore::open_default()
+                .and_then(|fs| fs.get_stats())
+                .ok();
+            
             println!("{}", serde_json::to_string_pretty(&serde_json::json!({
                 "quarantine": {
                     "total_entries": q_stats.total_entries,
@@ -194,8 +200,15 @@ fn main() -> Result<()> {
                     "total_cached_size": s.total_cached_size,
                     "last_saved": s.last_saved,
                 })),
+                "feature_store": feature_stats.map(|s| serde_json::json!({
+                    "package_count": s.package_count,
+                    "project_count": s.project_count,
+                    "event_count": s.event_count,
+                    "feature_count": s.feature_count,
+                })),
             }))?);
         }
+
         Commands::CleanupQuarantine { max_size_gb, retention_days } => {
             // Update config if parameters provided
             if max_size_gb.is_some() || retention_days.is_some() {

@@ -5,6 +5,10 @@ import chalk from 'chalk';
 import { logger } from '../utils/logger';
 import { runCore, runCoreStreaming, StreamProgress } from '../utils/core-utils';
 import { output, OutputFormat } from '../utils/formatter';
+import { loadConfig, detectWorkspace, mergeWithCliOptions, generateExampleConfig, PackagePurgeConfig } from '../utils/config';
+
+// Load configuration early
+const { config: loadedConfig, source: configSource } = loadConfig();
 
 // Enhanced spinner with progress tracking
 class Spinner {
@@ -313,22 +317,142 @@ program
 		output(res.stdout, format, 'symlink');
 	});
 
-// Stats command - New!
+// Stats command - uses Rust core stats
 program
 	.command('stats')
 	.description('Show quarantine and cache statistics')
 	.action(async (opts, cmd) => {
 		const g = cmd.parent?.opts?.() || {};
-		const format = (g.format || 'table') as OutputFormat;
+		const format = (g.format || loadedConfig.format || 'table') as OutputFormat;
 
-		console.log(chalk.bold('\n📊 PackagePurge Statistics\n'));
+		if (format === 'json' || format === 'yaml') {
+			const res = await runCore(['stats']);
+			if (res.code === 0) {
+				output(res.stdout, format, 'stats');
+			} else {
+				console.error('Failed to get stats:', res.stderr);
+				process.exit(res.code);
+			}
+		} else {
+			console.log(chalk.bold('\n📊 PackagePurge Statistics\n'));
 
-		// For now, basic info - will be enhanced when Rust side supports stats command
-		console.log(chalk.cyan('Quarantine Location:'), chalk.white('~/.packagepurge/quarantine'));
-		console.log(chalk.cyan('Cache Location:'), chalk.white('~/.packagepurge/scan_cache.json'));
-		console.log(chalk.cyan('Config Location:'), chalk.white('~/.packagepurge/config.json'));
-		console.log();
-		console.log(chalk.dim('Run `purge scan` to populate cache statistics.'));
+			// Show config source
+			if (configSource) {
+				console.log(chalk.cyan('Config loaded from:'), chalk.white(configSource));
+			} else {
+				console.log(chalk.cyan('Config:'), chalk.dim('Using defaults (no config file found)'));
+			}
+
+			// Detect workspace
+			const workspace = detectWorkspace();
+			if (workspace.type) {
+				console.log(chalk.cyan('Workspace:'), chalk.white(`${workspace.type} (${workspace.packages.length} packages)`));
+				console.log(chalk.cyan('Workspace root:'), chalk.white(workspace.root));
+			}
+
+			console.log();
+
+			// Get stats from core
+			const res = await runCore(['stats']);
+			if (res.code === 0) {
+				try {
+					const stats = JSON.parse(res.stdout);
+					console.log(chalk.bold('Quarantine:'));
+					console.log(`  Entries: ${stats.quarantine?.total_entries || 0}`);
+					console.log(`  Size: ${formatBytes(stats.quarantine?.total_size_bytes || 0)}`);
+					console.log(`  Oldest: ${stats.quarantine?.oldest_entry_days || 0} days`);
+					console.log();
+
+					if (stats.scan_cache) {
+						console.log(chalk.bold('Scan Cache:'));
+						console.log(`  Entries: ${stats.scan_cache.total_entries}`);
+						console.log(`  Cached size: ${formatBytes(stats.scan_cache.total_cached_size)}`);
+					}
+				} catch {
+					console.log(res.stdout);
+				}
+			}
+
+			console.log();
+			console.log(chalk.dim('Locations:'));
+			console.log(chalk.dim('  Quarantine: ~/.packagepurge/quarantine'));
+			console.log(chalk.dim('  Cache: ~/.packagepurge/scan_cache.json'));
+			console.log(chalk.dim('  Features: ~/.packagepurge/features.db'));
+		}
 	});
 
+// Config command - show current configuration
+program
+	.command('config')
+	.description('Show current configuration')
+	.option('--json', 'Output as JSON')
+	.action(async (opts) => {
+		if (opts.json) {
+			console.log(JSON.stringify(loadedConfig, null, 2));
+		} else {
+			console.log(chalk.bold('\n⚙️  PackagePurge Configuration\n'));
+
+			if (configSource) {
+				console.log(chalk.green('✓'), `Loaded from: ${chalk.cyan(configSource)}`);
+			} else {
+				console.log(chalk.yellow('!'), 'No config file found, using defaults');
+				console.log(chalk.dim('  Run `purge init` to create a config file'));
+			}
+
+			console.log();
+			console.log(chalk.bold('Settings:'));
+			console.log(`  preserveDays: ${loadedConfig.preserveDays}`);
+			console.log(`  enableSymlinking: ${loadedConfig.enableSymlinking}`);
+			console.log(`  enableMl: ${loadedConfig.enableMl}`);
+			console.log(`  lruMaxPackages: ${loadedConfig.lruMaxPackages}`);
+			console.log(`  lruMaxSizeBytes: ${formatBytes(loadedConfig.lruMaxSizeBytes || 0)}`);
+			console.log(`  format: ${loadedConfig.format}`);
+
+			if (loadedConfig.paths && loadedConfig.paths.length > 0) {
+				console.log(`  paths: ${loadedConfig.paths.join(', ')}`);
+			}
+
+			if (loadedConfig.exclude && loadedConfig.exclude.length > 0) {
+				console.log(`  exclude: ${loadedConfig.exclude.join(', ')}`);
+			}
+
+			console.log();
+			console.log(chalk.bold('Quarantine:'));
+			console.log(`  maxSizeGb: ${loadedConfig.quarantine?.maxSizeGb}`);
+			console.log(`  retentionDays: ${loadedConfig.quarantine?.retentionDays}`);
+		}
+	});
+
+// Init command - generate example config
+program
+	.command('init')
+	.description('Create a .packagepurgerc.yaml configuration file')
+	.option('-f, --force', 'Overwrite existing config file')
+	.action(async (opts) => {
+		const configPath = '.packagepurgerc.yaml';
+
+		if (!opts.force && require('fs').existsSync(configPath)) {
+			console.log(chalk.yellow('⚠'), `Config file already exists: ${configPath}`);
+			console.log(chalk.dim('  Use --force to overwrite'));
+			process.exit(1);
+		}
+
+		const content = generateExampleConfig();
+		require('fs').writeFileSync(configPath, content);
+
+		console.log(chalk.green('✓'), `Created ${chalk.cyan(configPath)}`);
+		console.log();
+		console.log(chalk.dim('Edit this file to customize PackagePurge behavior.'));
+		console.log(chalk.dim('Run `purge config` to see current settings.'));
+	});
+
+// Helper function for formatting bytes
+function formatBytes(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+	return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
 program.parse(process.argv);
+

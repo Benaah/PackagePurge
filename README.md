@@ -43,6 +43,7 @@ Download pre-built binaries from [GitHub Releases](https://github.com/Benaah/Pac
 | macOS ARM64 (M1/M2) | `purge-macos-arm64` |
 
 **Linux/macOS:**
+
 ```bash
 # Download and make executable
 chmod +x purge-linux-x64
@@ -51,11 +52,11 @@ purge --help
 ```
 
 **Windows:**
+
 ```powershell
 # Add to PATH or run directly
 .\purge-windows-x64.exe --help
 ```
-
 
 ## 🚀 Quick Start
 
@@ -88,6 +89,7 @@ purge scan --format json
 ```
 
 **Sample Output:**
+
 ```
 📦 Packages Found
 
@@ -117,6 +119,7 @@ purge analyze --preserve-days 30 --paths ./my-project
 ```
 
 **Sample Output:**
+
 ```
 🧹 Cleanup Plan
 
@@ -209,17 +212,61 @@ purge analyze --format yaml
 
 ## 🔧 Configuration
 
-Create a `.packagepurge.json` file in your project root:
+PackagePurge supports configuration files in your project root. Create one with:
 
-```json
-{
-  "preserveDays": 90,
-  "keepVersions": 2,
-  "enableML": false,
-  "backupEnabled": true,
-  "managers": ["npm", "yarn", "pnpm"]
-}
+```bash
+purge init
 ```
+
+This creates `.packagepurgerc.yaml`:
+
+```yaml
+# Days to preserve packages (default: 90)
+preserveDays: 90
+
+# Paths to scan
+paths:
+  - .
+
+# Patterns to exclude
+exclude:
+  - "**/node_modules/.cache/**"
+
+# Enable symlinking for duplicates
+enableSymlinking: false
+
+# Enable ML-based predictions
+enableMl: false
+
+# Quarantine settings
+quarantine:
+  maxSizeGb: 10
+  retentionDays: 30
+```
+
+### Configuration Commands
+
+```bash
+# View current configuration
+purge config
+
+# View config as JSON
+purge config --json
+
+# Show statistics (quarantine, cache, features)
+purge stats
+
+# Cleanup old quarantine entries
+purge cleanup-quarantine --retention-days 30
+```
+
+### Workspace Detection
+
+PackagePurge auto-detects monorepo workspaces:
+
+- **pnpm**: `pnpm-workspace.yaml`
+- **yarn/npm**: `package.json` workspaces field
+- **lerna**: `lerna.json`
 
 ## 🏗️ Architecture
 

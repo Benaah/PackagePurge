@@ -286,8 +286,9 @@ export function formatAsYAML(data: any): string {
 export function output(
     data: string | object,
     format: OutputFormat,
-    type: 'scan' | 'analyze' | 'optimize' | 'quarantine' | 'rollback' | 'symlink' = 'analyze'
+    type: 'scan' | 'analyze' | 'optimize' | 'quarantine' | 'rollback' | 'symlink' | 'stats' = 'analyze'
 ): void {
+
     // Parse JSON string if needed
     let parsed: any;
     if (typeof data === 'string') {
