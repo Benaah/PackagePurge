@@ -1,4 +1,8 @@
-#![allow(dead_code)]
+//! Usage Tracker
+//!
+//! Tracks and persists package usage metrics across runs.
+//! This data feeds into ML predictions for smarter eviction decisions.
+
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::fs;
@@ -14,7 +18,14 @@ pub struct UsageTracker {
 }
 
 impl UsageTracker {
+    /// Default path for usage metrics cache
+    pub fn default_cache_path() -> PathBuf {
+        let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
+        home.join(".packagepurge").join("usage_metrics.json")
+    }
+
     pub fn new(cache_path: PathBuf, max_packages: usize, max_size_bytes: u64) -> Result<Self> {
+
         // Ensure cache directory exists
         if let Some(parent) = cache_path.parent() {
             fs::create_dir_all(parent)

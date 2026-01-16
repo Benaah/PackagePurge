@@ -55,7 +55,6 @@ pub struct QuarantineRecord {
 }
 
 /// Usage metrics for a package
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackageUsageMetrics {
     pub package_key: String, // Format: "name@version"
@@ -66,8 +65,21 @@ pub struct PackageUsageMetrics {
     pub last_successful_build: Option<DateTime<Utc>>,
 }
 
+impl Default for PackageUsageMetrics {
+    fn default() -> Self {
+        Self {
+            package_key: String::new(),
+            last_access_time: Utc::now(),
+            last_script_execution: None,
+            access_count: 0,
+            script_execution_count: 0,
+            last_successful_build: None,
+        }
+    }
+}
+
+
 /// Project metadata for ML features
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectMetadata {
     pub path: String,
@@ -78,7 +90,6 @@ pub struct ProjectMetadata {
 }
 
 /// Developer behavior metrics
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeveloperBehavior {
     pub npm_commands_executed: Vec<(String, DateTime<Utc>)>, // (command, timestamp)
